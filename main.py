@@ -398,6 +398,22 @@ def explore():
             print(f"::notice::[{name}] 大小={len(raw)} 消息数={len(ids)} id范围={rng}")
         except Exception as e:  # noqa: BLE001
             print(f"::notice::[{name}] 失败: {e}")
+    # 官网公告页抓取测试（对比 Telegram 入口）
+    for label, page_url in [
+        ("官网公告页", "https://upbit.com/service_center/notice"),
+        ("官网公告页-带完整头", "https://upbit.com/service_center/notice"),
+    ]:
+        try:
+            req = urllib.request.Request(page_url, headers=BROWSER_HEADERS)
+            with _opener.open(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+            has_data = ("notice" in raw.lower()) or ("거래" in raw)
+            print(f"::notice::[{label}] HTTP {resp.status} 大小={len(raw)} 含公告数据={has_data}")
+            print(f"::notice::  前180字符: {raw[:180]!r}")
+        except urllib.error.HTTPError as e:
+            print(f"::notice::[{label}] HTTP {e.code}")
+        except Exception as e:  # noqa: BLE001
+            print(f"::notice::[{label}] 失败: {e}")
     # 打印第一条消息的原始 HTML（用 before=0 的窗口）
     try:
         req = urllib.request.Request(f"{TELEGRAM_URL}?before=0", headers=BROWSER_HEADERS)
