@@ -294,35 +294,53 @@ def send_email(subject: str, body: str):
 
 
 # ─────────────────────────── 接口探测（调试用）───────────────────────────
-EXPLORE_URLS = [
-    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=general",
-    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=community",
-    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=all",
-    "https://upbit.com/api/v1/notices?page=1&per_page=5&thread_name=general",
-    "https://api.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=general",
-    "https://api-manager.upbit.com/api/v1/announcements?page=1&per_page=5",
-    "https://api-manager.upbit.com/api/v1/notice?page=1&per_page=5",
-    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=notice",
-    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=exchange",
-    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=service",
-]
+def diagnose_page():
+    """分析公告页 HTML 结构，并尝试从 JS bundle 中反查真实公告接口。"""
+    warm_up_cookies()
+    url = "https://upbit.com/service_center/notice"
+    try:
+        req = urllib.request.Request(url, headers=BROWSER_HEADERS)
+        with _opener.open(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        print(f"::notice::公告页 HTML 大小: {len(raw)} bytes | HTTP {resp.status}")
+        for kw in ["거래지원", "상장", "notice", "__NEXT_DATA__", "window.__", "root"]:
+            print(f"::notice::包含 '{kw}': {kw in raw}")
+        t = re.search(r"<title>(.*?)</title>", raw, re.S)
+        if t:
+            print(f"::notice::<title>: {t.group(1)[:120]}")
+        m = re.search(r'window\.__[A-Z_]+__\s*=\s*(\{.{0,300})', raw)
+        if m:
+            print(f"::notice::内嵌状态JSON: {m.group(1)[:300]}")
+        else:
+            print("::notice::未发现内嵌状态 JSON")
+        scripts = re.findall(r'<script[^>]+src="([^"]+)"', raw)
+        print(f"::notice::script 数量: {len(scripts)}")
+        for s in scripts[:12]:
+            print(f"::notice::  script: {s[:130]}")
+        # 尝试从 JS bundle 中反查 API 路径
+        for s in scripts[:6]:
+            js_url = s if s.startswith("http") else ("https://upbit.com" + s if s.startswith("/") else "https://upbit.com/" + s)
+            try:
+                jreq = urllib.request.Request(js_url, headers=BROWSER_HEADERS)
+                with _opener.open(jreq, timeout=30) as jresp:
+                    js = jresp.read().decode("utf-8", errors="replace")
+                print(f"::notice::JS [{js_url[-80:]}] 大小 {len(js)}")
+                for kw in ["notices", "notice", "announcement", "api-manager", "/api/v1"]:
+                    idxs = [mm.start() for mm in re.finditer(re.escape(kw), js)][:3]
+                    for i in idxs:
+                        seg = js[max(0, i - 60):i + 80].replace("\n", " ")
+                        print(f"::notice::  含'{kw}': ...{seg}...")
+                        break
+                if idxs:
+                    break  # 找到关键字就停
+            except Exception as e:  # noqa: BLE001
+                print(f"::notice::  JS 抓取失败 {js_url[-60:]}: {e}")
+    except Exception as e:  # noqa: BLE001
+        print(f"::error::公告页抓取失败: {e}")
 
 
 def explore():
-    """探测候选接口：输出状态码、Content-Type 与响应前 150 字符。"""
-    warm_up_cookies()
-    for url in EXPLORE_URLS:
-        try:
-            req = urllib.request.Request(url, headers=BROWSER_HEADERS)
-            with _opener.open(req, timeout=25) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
-            ct = resp.headers.get("Content-Type", "?")
-            print(f"::notice::[{resp.status}] {ct} | {url}")
-            print(f"::notice::  内容: {raw[:150]!r}")
-        except urllib.error.HTTPError as e:
-            print(f"::notice::[HTTP {e.code}] {url}")
-        except Exception as e:  # noqa: BLE001
-            print(f"::notice::[ERR {e}] {url}")
+    diagnose_page()
 
 
 # ─────────────────────────── 主流程 ───────────────────────────
