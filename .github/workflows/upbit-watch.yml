@@ -2,8 +2,8 @@ name: upbit-listing-watcher
 
 on:
   schedule:
-    # 每 15 分钟运行一次（GitHub 对私有仓库有每月 2000 分钟额度限制，见 README）
-    - cron: '*/15 * * * *'
+    # 每 5 分钟运行一次（public 仓库免费不限量；private 仓库每月 2000 分钟会超额，见 README）
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     # 手动触发；勾选"发送测试邮件"可立即验证邮箱配置
     inputs:
