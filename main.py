@@ -47,8 +47,8 @@ TELEGRAM_URL = f"https://t.me/s/{TELEGRAM_CHANNEL}"
 
 def fetch_telegram_messages() -> list:
     """抓取 Telegram 官方频道网页版最新消息，返回消息 dict 列表。"""
-    # before=<当前时间戳> 强制获取最新消息窗口（默认 t.me/s/ 显示起始窗口）
-    url = f"{TELEGRAM_URL}?before={int(time.time())}"
+    # before=0 获取最新消息窗口（实测 t.me/s/ 默认显示旧窗口，before=0 生效）
+    url = f"{TELEGRAM_URL}?before=0"
     req = urllib.request.Request(url, headers=BROWSER_HEADERS)
     with _opener.open(req, timeout=30) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
@@ -414,6 +414,15 @@ def explore():
             print(f"::notice::[{label}] HTTP {e.code}")
         except Exception as e:  # noqa: BLE001
             print(f"::notice::[{label}] 失败: {e}")
+    # 完整解析全部消息，输出每条 id/时间/文本/上架判断
+    try:
+        msgs = fetch_telegram_messages()
+        print(f"::notice::完整解析 {len(msgs)} 条消息:")
+        for m in msgs:
+            match = "上架" if is_listing_notice(m["text"]) else "非上架"
+            print(f"::notice::  id={m['id']} time={m['time']} text={m['text'][:60]!r} | {match}")
+    except Exception as e:  # noqa: BLE001
+        print(f"::notice::完整解析失败: {e}")
     # 打印第一条消息的原始 HTML（用 before=0 的窗口）
     try:
         req = urllib.request.Request(f"{TELEGRAM_URL}?before=0", headers=BROWSER_HEADERS)
