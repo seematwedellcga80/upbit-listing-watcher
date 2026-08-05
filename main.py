@@ -306,5 +306,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:  # noqa: BLE001
-        print(f"[error] {e}", file=sys.stderr)
+        msg = f"{e}"
+        print(f"[error] {msg}", file=sys.stderr)
+        # 输出为 GitHub Actions 注释（可在 run 页面查看，也便于远程诊断）
+        print(f"::error::Upbit watcher 失败: {msg}")
         sys.exit(1)
