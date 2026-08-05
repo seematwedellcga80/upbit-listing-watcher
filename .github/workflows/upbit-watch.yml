@@ -1,0 +1,39 @@
+name: upbit-listing-watcher
+
+on:
+  schedule:
+    # 每 15 分钟运行一次（GitHub 对私有仓库有每月 2000 分钟额度限制，见 README）
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}   # 支持在 Actions 页面手动触发，方便测试
+
+permissions:
+  contents: write   # 允许把 state.json 提交回仓库
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run watcher
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python main.py
+
+      - name: Commit state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git diff --cached --quiet || git commit -m "chore: update watcher state"
+          git push
