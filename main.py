@@ -287,6 +287,12 @@ def main():
     save_state(notified)
     print(f"[info] 已处理公告数：{len(notified)}，新上架公告：{len(new_listings)} 条")
 
+    # 输出检测摘要为 GitHub 注释（便于远程诊断）
+    print(f"::notice::共获取 {len(items)} 条公告 | 新上架 {len(new_listings)} 条 | 已处理 {len(notified)} 个id")
+    for it in items[:3]:
+        title = it.get("title", "")
+        print(f"::notice::最近公告: {title[:80]} | 上架匹配: {is_listing_notice(title, it.get('content') or '')}")
+
     if first_run:
         print("[info] 首次运行，仅初始化状态，本次不发送邮件（从下一次起监控新公告）")
         return
