@@ -47,7 +47,9 @@ TELEGRAM_URL = f"https://t.me/s/{TELEGRAM_CHANNEL}"
 
 def fetch_telegram_messages() -> list:
     """抓取 Telegram 官方频道网页版最新消息，返回消息 dict 列表。"""
-    req = urllib.request.Request(TELEGRAM_URL, headers=BROWSER_HEADERS)
+    # before=<当前时间戳> 强制获取最新消息窗口（默认 t.me/s/ 显示起始窗口）
+    url = f"{TELEGRAM_URL}?before={int(time.time())}"
+    req = urllib.request.Request(url, headers=BROWSER_HEADERS)
     with _opener.open(req, timeout=30) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
     if "tgme_widget_message" not in raw:
