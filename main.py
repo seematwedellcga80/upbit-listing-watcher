@@ -379,62 +379,32 @@ def diagnose_page():
 
 
 def explore():
-    """探测：对比不同分页参数下 Telegram 频道能拿到的消息范围，并输出原始 HTML 片段。"""
+    """探测：解析最新几条 Telegram 消息，并输出最新消息原始 HTML。"""
     warm_up_cookies()
-    variants = {
-        "默认": TELEGRAM_URL,
-        "before=0": f"{TELEGRAM_URL}?before=0",
-        "before=now": f"{TELEGRAM_URL}?before={int(time.time())}",
-        "after=7d": f"{TELEGRAM_URL}?after={int(time.time()) - 7 * 86400}",
-    }
-    for name, url in variants.items():
-        try:
-            req = urllib.request.Request(url, headers=BROWSER_HEADERS)
-            with _opener.open(req, timeout=30) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
-            ids = re.findall(r'data-post="[^"]*upbit_news/(\d+)"', raw)
-            ids = list(dict.fromkeys(ids))
-            rng = f"{ids[0]}..{ids[-1]}" if ids else "-"
-            print(f"::notice::[{name}] 大小={len(raw)} 消息数={len(ids)} id范围={rng}")
-        except Exception as e:  # noqa: BLE001
-            print(f"::notice::[{name}] 失败: {e}")
-    # 官网公告页抓取测试（对比 Telegram 入口）
-    for label, page_url in [
-        ("官网公告页", "https://upbit.com/service_center/notice"),
-        ("官网公告页-带完整头", "https://upbit.com/service_center/notice"),
-    ]:
-        try:
-            req = urllib.request.Request(page_url, headers=BROWSER_HEADERS)
-            with _opener.open(req, timeout=30) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
-            has_data = ("notice" in raw.lower()) or ("거래" in raw)
-            print(f"::notice::[{label}] HTTP {resp.status} 大小={len(raw)} 含公告数据={has_data}")
-            print(f"::notice::  前180字符: {raw[:180]!r}")
-        except urllib.error.HTTPError as e:
-            print(f"::notice::[{label}] HTTP {e.code}")
-        except Exception as e:  # noqa: BLE001
-            print(f"::notice::[{label}] 失败: {e}")
-    # 完整解析全部消息，输出每条 id/时间/文本/上架判断
+    # 最新 3 条消息解析
     try:
         msgs = fetch_telegram_messages()
-        print(f"::notice::完整解析 {len(msgs)} 条消息:")
-        for m in msgs:
+        msgs_sorted = sorted(msgs, key=lambda x: int(x["id"]))
+        latest = msgs_sorted[-3:]
+        print(f"::notice::共 {len(msgs)} 条，最新 {len(latest)} 条解析:")
+        for m in latest:
             match = "上架" if is_listing_notice(m["text"]) else "非上架"
-            print(f"::notice::  id={m['id']} time={m['time']} text={m['text'][:60]!r} | {match}")
+            print(f"::notice::  id={m['id']} time={m['time']} text={m['text'][:100]!r} | {match}")
     except Exception as e:  # noqa: BLE001
-        print(f"::notice::完整解析失败: {e}")
-    # 打印第一条消息的原始 HTML（用 before=0 的窗口）
+        print(f"::notice::消息解析失败: {e}")
+    # 最新一条消息的原始 HTML
     try:
         req = urllib.request.Request(f"{TELEGRAM_URL}?before=0", headers=BROWSER_HEADERS)
         with _opener.open(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
-        parts = re.split(r'(?=<div class="tgme_widget_message_wrap)', raw)
-        if len(parts) > 1:
-            print(f"::notice::首条消息HTML片段: {parts[1][:700]!r}")
-        else:
-            print(f"::notice::未解析到消息块，页面前300字符: {raw[:300]!r}")
+        ids = [int(x) for x in re.findall(r'data-post="[^"]*upbit_news/(\d+)"', raw)]
+        if ids:
+            top = max(ids)
+            idx = raw.find(f'data-post="upbit_news/{top}"')
+            if idx >= 0:
+                print(f"::notice::最新消息(id={top})原始HTML: {raw[idx:idx+1200]!r}")
     except Exception as e:  # noqa: BLE001
-        print(f"::notice::HTML片段抓取失败: {e}")
+        print(f"::notice::原始HTML抓取失败: {e}")
 
 
 # ─────────────────────────── 主流程 ───────────────────────────
