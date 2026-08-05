@@ -75,11 +75,14 @@ GitHub 仓库页面 → **Settings → Secrets and variables → Actions → New
 | `SMTP_PASS` | 邮箱**授权码**（不是登录密码） | `xxxxxxxxxxxxxxxx` |
 | `MAIL_TO` | 收件邮箱（可与发件相同） | `yourname@qq.com` |
 
-### 4. 手动测试
+### 4. 手动测试（验证 SMTP 配置）
 
 1. 打开 GitHub 仓库 → **Actions** → 左侧 **upbit-listing-watcher**
-2. 点 **Run workflow** → 确认运行
-3. 等 1~2 分钟运行完成，到邮箱查收测试邮件（没有新公告时不会发邮件，属正常）
+2. 点 **Run workflow** → 勾选 **仅发送一封测试邮件（验证 SMTP 配置）** → 点绿色 **Run workflow**
+3. 等 1~2 分钟运行完成，**去邮箱查收测试邮件**（主题：`[Upbit] 测试邮件（SMTP 配置验证）`）
+
+> 收到测试邮件 = SMTP 配置正确，监控正式开始工作。
+> 首次运行若**不勾选**测试邮件，则只初始化状态、不发邮件（避免历史公告轰炸），下次起才开始监控新公告。
 
 ### 5. 验证自动运行
 

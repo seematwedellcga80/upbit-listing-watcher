@@ -244,6 +244,17 @@ def send_email(subject: str, body: str):
 
 # ─────────────────────────── 主流程 ───────────────────────────
 def main():
+    # 测试模式：只发一封测试邮件，验证 SMTP 配置
+    if os.environ.get("TEST_MAIL") in ("1", "true", "yes"):
+        send_email(
+            "[Upbit] 测试邮件（SMTP 配置验证）",
+            "这是一封来自 Upbit Listing Watcher 的测试邮件。\n"
+            "如果你收到这封邮件，说明 SMTP 配置正确，可以正常接收上架公告通知。\n"
+            "（本邮件为手动触发，非公告通知）",
+        )
+        print("[ok] 测试邮件已发送")
+        return
+
     pages = int(os.environ.get("UPBIT_NOTICE_PAGES", "3"))
 
     notified = load_state()

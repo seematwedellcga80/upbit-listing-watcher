@@ -4,7 +4,13 @@ on:
   schedule:
     # 每 15 分钟运行一次（GitHub 对私有仓库有每月 2000 分钟额度限制，见 README）
     - cron: '*/15 * * * *'
-  workflow_dispatch: {}   # 支持在 Actions 页面手动触发，方便测试
+  workflow_dispatch:
+    # 手动触发；勾选"发送测试邮件"可立即验证邮箱配置
+    inputs:
+      test_mail:
+        description: '仅发送一封测试邮件（验证 SMTP 配置）'
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # 允许把 state.json 提交回仓库
@@ -24,10 +30,11 @@ jobs:
       - name: Run watcher
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || '465' }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
+          TEST_MAIL: ${{ github.event.inputs.test_mail || 'false' }}
         run: python main.py
 
       - name: Commit state
