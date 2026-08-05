@@ -293,8 +293,45 @@ def send_email(subject: str, body: str):
         s.sendmail(user, [to], msg.as_string())
 
 
+# ─────────────────────────── 接口探测（调试用）───────────────────────────
+EXPLORE_URLS = [
+    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=general",
+    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=community",
+    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=all",
+    "https://upbit.com/api/v1/notices?page=1&per_page=5&thread_name=general",
+    "https://api.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=general",
+    "https://api-manager.upbit.com/api/v1/announcements?page=1&per_page=5",
+    "https://api-manager.upbit.com/api/v1/notice?page=1&per_page=5",
+    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=notice",
+    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=exchange",
+    "https://api-manager.upbit.com/api/v1/notices?page=1&per_page=5&thread_name=service",
+]
+
+
+def explore():
+    """探测候选接口：输出状态码、Content-Type 与响应前 150 字符。"""
+    warm_up_cookies()
+    for url in EXPLORE_URLS:
+        try:
+            req = urllib.request.Request(url, headers=BROWSER_HEADERS)
+            with _opener.open(req, timeout=25) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+            ct = resp.headers.get("Content-Type", "?")
+            print(f"::notice::[{resp.status}] {ct} | {url}")
+            print(f"::notice::  内容: {raw[:150]!r}")
+        except urllib.error.HTTPError as e:
+            print(f"::notice::[HTTP {e.code}] {url}")
+        except Exception as e:  # noqa: BLE001
+            print(f"::notice::[ERR {e}] {url}")
+
+
 # ─────────────────────────── 主流程 ───────────────────────────
 def main():
+    # 接口探测模式（调试用）
+    if os.environ.get("UPBIT_EXPLORE") in ("1", "true", "yes"):
+        explore()
+        return
+
     # 测试模式：只发一封测试邮件，验证 SMTP 配置
     if os.environ.get("TEST_MAIL") in ("1", "true", "yes"):
         send_email(
