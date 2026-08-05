@@ -29,6 +29,7 @@ import urllib.request
 from email.header import Header
 from email.mime.text import MIMEText
 from email.utils import formataddr
+import html
 
 STATE_FILE = "state.json"
 STATE_MAX_IDS = 200  # state 中最多保留的已处理公告 id 数
@@ -38,7 +39,42 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
 
-# Upbit 公告 API 候选端点（依次尝试，接口结构可能随官方调整）
+# ─────────────────────────── Telegram 数据源（首选）───────────────────────────
+# Upbit 官方 Telegram 频道：上架消息第一时间同步发布，t.me 网页版可匿名抓取
+TELEGRAM_CHANNEL = "upbit_news"
+TELEGRAM_URL = f"https://t.me/s/{TELEGRAM_CHANNEL}"
+
+
+def fetch_telegram_messages() -> list:
+    """抓取 Telegram 官方频道网页版最新消息，返回消息 dict 列表。"""
+    req = urllib.request.Request(TELEGRAM_URL, headers=BROWSER_HEADERS)
+    with _opener.open(req, timeout=30) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+    if "tgme_widget_message" not in raw:
+        raise RuntimeError(f"Telegram 页面未包含消息内容（大小 {len(raw)}）")
+    messages = []
+    parts = re.split(r"(?=<div class=\"tgme_widget_message_wrap)", raw)
+    for part in parts:
+        m = re.search(r"data-post=\"[^\"]*upbit_news/(\d+)\"", part)
+        if not m:
+            continue
+        mid = m.group(1)
+        tm = re.search(r"<time datetime=\"([^\"]+)\"", part)
+        text_m = re.search(r"class=\"tgme_widget_message_text[^\"]*\">(.*?)</div>", part, re.S)
+        text = ""
+        if text_m:
+            text = re.sub(r"<[^>]+>", "", text_m.group(1))
+            text = html.unescape(text).strip()
+        messages.append({
+            "id": mid,
+            "text": text,
+            "time": tm.group(1) if tm else "",
+            "url": f"https://t.me/upbit_news/{mid}",
+        })
+    return messages
+
+
+# Upbit 公告 API 候选端点（回退用；官方已改版，可能全部失效）
 NOTICE_ENDPOINTS = [
     "https://api-manager.upbit.com/api/v1/notices?page={page}&per_page={per}&thread_name=general",
     "https://upbit.com/api/v1/notices?page={page}&per_page={per}&thread_name=general",
@@ -252,9 +288,9 @@ def build_email_body(items: list) -> str:
         "=" * 60,
     ]
     for it in items:
-        title = it.get("title", "（无标题）")
+        title = it.get("title") or it.get("text") or "（无标题）"
         nid = notice_id(it)
-        created = it.get("created_at") or it.get("createdAt") or ""
+        created = it.get("created_at") or it.get("createdAt") or it.get("time") or ""
         content = it.get("content") or it.get("body") or ""
         markets = extract_markets(title, content)
         lines.append(f"公告标题：{title}")
@@ -262,7 +298,8 @@ def build_email_body(items: list) -> str:
             lines.append(f"涉及市场：{' / '.join(markets)}")
         if created:
             lines.append(f"发布时间：{created}")
-        lines.append(f"公告链接：https://upbit.com/service_center/notice?id={nid}")
+        link = it.get("url") or f"https://upbit.com/service_center/notice?id={nid}"
+        lines.append(f"公告链接：{link}")
         lines.append("-" * 60)
     lines.append(
         "说明：本通知由 GitHub Actions 定时轮询 Upbit 官方公告生成，"
@@ -367,9 +404,15 @@ def main():
     # 首次运行（无状态文件）：只初始化，不发送历史公告，避免轰炸
     first_run = not os.path.exists(STATE_FILE)
 
-    print(f"[info] 拉取公告（前 {pages} 页）...")
-    items = fetch_notices(pages=pages)
-    print(f"[info] 共获取 {len(items)} 条公告")
+    print(f"[info] 拉取 Telegram 频道 @{TELEGRAM_CHANNEL} 最新消息...")
+    try:
+        items = fetch_telegram_messages()
+        source = "Telegram"
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] Telegram 抓取失败，回退公告 API: {e}", file=sys.stderr)
+        items = fetch_notices(pages=pages)
+        source = "公告API"
+    print(f"[info] 数据源={source}，共获取 {len(items)} 条消息")
 
     new_listings = []
     for it in items:
@@ -378,7 +421,7 @@ def main():
             continue
         if nid in notified:
             continue
-        title = it.get("title", "")
+        title = it.get("title") or it.get("text") or ""
         content = it.get("content") or it.get("body") or ""
         if is_listing_notice(title, content):
             new_listings.append(it)
@@ -394,10 +437,10 @@ def main():
     print(f"[info] 已处理公告数：{len(notified)}，新上架公告：{len(new_listings)} 条")
 
     # 输出检测摘要为 GitHub 注释（便于远程诊断）
-    print(f"::notice::共获取 {len(items)} 条公告 | 新上架 {len(new_listings)} 条 | 已处理 {len(notified)} 个id")
+    print(f"::notice::数据源={source} | 共获取 {len(items)} 条 | 新上架 {len(new_listings)} 条 | 已处理 {len(notified)} 个id")
     for it in items[:3]:
-        title = it.get("title", "")
-        print(f"::notice::最近公告: {title[:80]} | 上架匹配: {is_listing_notice(title, it.get('content') or '')}")
+        title = it.get("title") or it.get("text") or ""
+        print(f"::notice::最近消息: {title[:80]} | 上架匹配: {is_listing_notice(title, it.get('content') or '')}")
 
     if first_run:
         print("[info] 首次运行，仅初始化状态，本次不发送邮件（从下一次起监控新公告）")
