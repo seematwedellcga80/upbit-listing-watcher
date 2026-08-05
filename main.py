@@ -62,7 +62,7 @@ def fetch_telegram_messages() -> list:
             continue
         mid = m.group(1)
         tm = re.search(r"<time datetime=\"([^\"]+)\"", part)
-        text_m = re.search(r"class=\"tgme_widget_message_text[^\"]*\">(.*?)</div>", part, re.S)
+        text_m = re.search(r"class=\"tgme_widget_message_text[^\"]*\"[^>]*>(.*?)</div>", part, re.S)
         text = ""
         if text_m:
             text = re.sub(r"<[^>]+>", "", text_m.group(1))
@@ -433,6 +433,17 @@ def main():
             "（本邮件为手动触发，非公告通知）",
         )
         print("[ok] 测试邮件已发送")
+        return
+
+    # 摘要模式：把当前检测到的上架公告直接发一封邮件（立即验证全链路）
+    if os.environ.get("SEND_LATEST") in ("1", "true", "yes"):
+        items = fetch_telegram_messages()
+        listings = [m for m in items if is_listing_notice(m["text"])]
+        if listings:
+            send_email(f"[Upbit] 当前上架公告摘要 ×{len(listings)}", build_email_body(listings))
+            print(f"[ok] 已发送当前上架公告摘要（{len(listings)} 条）")
+        else:
+            print("[info] 当前频道无上架公告，未发送")
         return
 
     pages = int(os.environ.get("UPBIT_NOTICE_PAGES", "3"))

@@ -11,6 +11,10 @@ on:
         description: '仅发送一封测试邮件（验证 SMTP 配置）'
         type: boolean
         default: false
+      send_latest:
+        description: '把当前上架公告直接发一封邮件（立即验证全链路）'
+        type: boolean
+        default: false
       explore:
         description: '探测 Upbit 公告接口（调试用）'
         type: boolean
@@ -54,6 +58,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
           TEST_MAIL: ${{ github.event.inputs.test_mail || 'false' }}
+          SEND_LATEST: ${{ github.event.inputs.send_latest || 'false' }}
           UPBIT_EXPLORE: ${{ github.event.inputs.explore || 'false' }}
         run: python main.py
 
