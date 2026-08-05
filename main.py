@@ -379,15 +379,37 @@ def diagnose_page():
 
 
 def explore():
-    """探测：抓取 Telegram 频道并输出解析结果，验证数据源可用性。"""
+    """探测：对比不同分页参数下 Telegram 频道能拿到的消息范围，并输出原始 HTML 片段。"""
+    warm_up_cookies()
+    variants = {
+        "默认": TELEGRAM_URL,
+        "before=0": f"{TELEGRAM_URL}?before=0",
+        "before=now": f"{TELEGRAM_URL}?before={int(time.time())}",
+        "after=7d": f"{TELEGRAM_URL}?after={int(time.time()) - 7 * 86400}",
+    }
+    for name, url in variants.items():
+        try:
+            req = urllib.request.Request(url, headers=BROWSER_HEADERS)
+            with _opener.open(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+            ids = re.findall(r'data-post="[^"]*upbit_news/(\d+)"', raw)
+            ids = list(dict.fromkeys(ids))
+            rng = f"{ids[0]}..{ids[-1]}" if ids else "-"
+            print(f"::notice::[{name}] 大小={len(raw)} 消息数={len(ids)} id范围={rng}")
+        except Exception as e:  # noqa: BLE001
+            print(f"::notice::[{name}] 失败: {e}")
+    # 打印第一条消息的原始 HTML（用 before=0 的窗口）
     try:
-        msgs = fetch_telegram_messages()
-        print(f"::notice::Telegram 抓取成功，共 {len(msgs)} 条消息")
-        for m in msgs[:5]:
-            match = "上架" if is_listing_notice(m["text"]) else "非上架"
-            print(f"::notice::[{m['time']}] id={m['id']} {m['text'][:80]!r} | {match}")
+        req = urllib.request.Request(f"{TELEGRAM_URL}?before=0", headers=BROWSER_HEADERS)
+        with _opener.open(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        parts = re.split(r'(?=<div class="tgme_widget_message_wrap)', raw)
+        if len(parts) > 1:
+            print(f"::notice::首条消息HTML片段: {parts[1][:700]!r}")
+        else:
+            print(f"::notice::未解析到消息块，页面前300字符: {raw[:300]!r}")
     except Exception as e:  # noqa: BLE001
-        print(f"::error::Telegram 抓取失败: {e}")
+        print(f"::notice::HTML片段抓取失败: {e}")
 
 
 # ─────────────────────────── 主流程 ───────────────────────────
