@@ -98,10 +98,52 @@ def extract_markets(title: str, content: str = "") -> list:
 
 
 # ─────────────────────────── 网络请求 ───────────────────────────
+import http.cookiejar
+import urllib.error
+
+# 模拟真实浏览器的完整请求头，绕过 Cloudflare 基础风控
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Referer": "https://upbit.com/service_center/notice",
+    "Origin": "https://upbit.com",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
+    "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "Connection": "keep-alive",
+}
+
+_cookie_jar = http.cookiejar.CookieJar()
+_opener = urllib.request.build_opener(
+    urllib.request.HTTPCookieProcessor(_cookie_jar),
+    urllib.request.HTTPRedirectHandler(),
+)
+
+
+def warm_up_cookies():
+    """先访问公告页，获取 Cloudflare cookie，再请求 API。失败不影响后续尝试。"""
+    try:
+        req = urllib.request.Request(
+            "https://upbit.com/service_center/notice", headers=BROWSER_HEADERS
+        )
+        _opener.open(req, timeout=30).read(1024)
+        print("[info] cookie 预热完成")
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] cookie 预热失败（继续尝试 API）: {e}", file=sys.stderr)
+
+
 def fetch_json(url: str, timeout: int = 30) -> dict:
     """GET 请求并解析 JSON，失败抛异常。"""
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    req = urllib.request.Request(url, headers=BROWSER_HEADERS)
+    with _opener.open(req, timeout=timeout) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
     data = json.loads(raw)
     return data
@@ -146,6 +188,7 @@ def parse_notices(data) -> list:
 
 def fetch_notices(pages: int, per_page: int = 20) -> list:
     """依次尝试各端点，拉取前 pages 页公告，返回公告 dict 列表。"""
+    warm_up_cookies()
     last_err = None
     for endpoint in NOTICE_ENDPOINTS:
         try:
@@ -161,10 +204,13 @@ def fetch_notices(pages: int, per_page: int = 20) -> list:
                     break
             if all_items:
                 return all_items
+        except urllib.error.HTTPError as e:
+            last_err = f"HTTP {e.code} {e.reason}"
+            print(f"[warn] 端点 {endpoint} HTTP {e.code}: {e.reason}", file=sys.stderr)
         except Exception as e:  # noqa: BLE001
-            last_err = e
+            last_err = repr(e)
             print(f"[warn] 端点 {endpoint} 请求失败: {e}", file=sys.stderr)
-            time.sleep(2)
+        time.sleep(2)
     raise RuntimeError(f"所有公告端点均请求失败: {last_err}")
 
 
