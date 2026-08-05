@@ -377,7 +377,15 @@ def diagnose_page():
 
 
 def explore():
-    diagnose_page()
+    """探测：抓取 Telegram 频道并输出解析结果，验证数据源可用性。"""
+    try:
+        msgs = fetch_telegram_messages()
+        print(f"::notice::Telegram 抓取成功，共 {len(msgs)} 条消息")
+        for m in msgs[:5]:
+            match = "上架" if is_listing_notice(m["text"]) else "非上架"
+            print(f"::notice::[{m['time']}] id={m['id']} {m['text'][:80]!r} | {match}")
+    except Exception as e:  # noqa: BLE001
+        print(f"::error::Telegram 抓取失败: {e}")
 
 
 # ─────────────────────────── 主流程 ───────────────────────────
