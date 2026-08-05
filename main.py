@@ -30,6 +30,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from email.utils import formataddr
 import html
+from datetime import datetime, timedelta, timezone
 
 STATE_FILE = "state.json"
 STATE_MAX_IDS = 200  # state 中最多保留的已处理公告 id 数
@@ -38,6 +39,28 @@ USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
+
+# ─────────────────────────── 时间过滤 ───────────────────────────
+# 只通知最近 N 小时内的上架公告，避免把历史公告（如部署前/停机期间的）也发出来
+NOTICE_FRESH_HOURS = 48
+
+
+def _parse_msg_time(t: str):
+    """解析消息 ISO 时间；解析失败返回 None。"""
+    try:
+        return datetime.fromisoformat(t)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def is_fresh(msg: dict, hours: int = NOTICE_FRESH_HOURS) -> bool:
+    """消息是否在最近 hours 小时内发布（无时间信息时保守放行）。"""
+    dt = _parse_msg_time(msg.get("time", ""))
+    if dt is None:
+        return True
+    now = datetime.now(timezone.utc)
+    return (now - dt).total_seconds() <= hours * 3600
+
 
 # ─────────────────────────── Telegram 数据源（首选）───────────────────────────
 # Upbit 官方 Telegram 频道：上架消息第一时间同步发布，t.me 网页版可匿名抓取
@@ -448,10 +471,12 @@ def main():
     # 摘要模式：把当前检测到的上架公告直接发一封邮件（立即验证全链路）
     if os.environ.get("SEND_LATEST") in ("1", "true", "yes"):
         items = fetch_telegram_messages()
-        listings = [m for m in items if is_listing_notice(m["text"])]
+        listings = [m for m in items if is_listing_notice(m["text"]) and is_fresh(m, 12)]
         if listings:
-            send_email(f"[Upbit] 当前上架公告摘要 ×{len(listings)}", build_email_body(listings))
+            body = build_email_body(listings)
+            send_email(f"[Upbit] 当前上架公告摘要 ×{len(listings)}", body)
             print(f"[ok] 已发送当前上架公告摘要（{len(listings)} 条）")
+            print(f"::notice::摘要邮件内容:\n{body[:1500]}")
         else:
             print("[info] 当前频道无上架公告，未发送")
         return
@@ -481,7 +506,7 @@ def main():
             continue
         title = it.get("title") or it.get("text") or ""
         content = it.get("content") or it.get("body") or ""
-        if is_listing_notice(title, content):
+        if is_listing_notice(title, content) and is_fresh(it):
             new_listings.append(it)
         notified.add(nid)
 
