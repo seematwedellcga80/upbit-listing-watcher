@@ -392,7 +392,7 @@ def explore():
             print(f"::notice::  id={m['id']} time={m['time']} text={m['text'][:100]!r} | {match}")
     except Exception as e:  # noqa: BLE001
         print(f"::notice::消息解析失败: {e}")
-    # 最新一条消息的原始 HTML
+    # 最新一条消息的原始 HTML（加大范围，看气泡内部结构）
     try:
         req = urllib.request.Request(f"{TELEGRAM_URL}?before=0", headers=BROWSER_HEADERS)
         with _opener.open(req, timeout=30) as resp:
@@ -402,9 +402,19 @@ def explore():
             top = max(ids)
             idx = raw.find(f'data-post="upbit_news/{top}"')
             if idx >= 0:
-                print(f"::notice::最新消息(id={top})原始HTML: {raw[idx:idx+1200]!r}")
+                print(f"::notice::最新消息(id={top})HTML 2000-5000字符: {raw[idx+2000:idx+5000]!r}")
     except Exception as e:  # noqa: BLE001
         print(f"::notice::原始HTML抓取失败: {e}")
+    # 搜索所有文本节点位置
+    try:
+        req = urllib.request.Request(f"{TELEGRAM_URL}?before=0", headers=BROWSER_HEADERS)
+        with _opener.open(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        for m in list(re.finditer(r'message_text', raw))[:6]:
+            print(f"::notice::message_text出现于偏移{m.start()}上下文: {raw[m.start()-60:m.start()+200]!r}")
+        print(f"::notice::页面中 text_not_supported 出现次数: {len(re.findall('text_not_supported', raw))}")
+    except Exception as e:  # noqa: BLE001
+        print(f"::notice::文本节点搜索失败: {e}")
 
 
 # ─────────────────────────── 主流程 ───────────────────────────
