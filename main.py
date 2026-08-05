@@ -42,6 +42,7 @@ USER_AGENT = (
 NOTICE_ENDPOINTS = [
     "https://api-manager.upbit.com/api/v1/notices?page={page}&per_page={per}&thread_name=general",
     "https://upbit.com/api/v1/notices?page={page}&per_page={per}&thread_name=general",
+    "https://api.upbit.com/api/v1/notices?page={page}&per_page={per}&thread_name=general",
 ]
 
 # ── 上架公告关键字（命中任意一个即可能是新交易对上架）────────────────────
@@ -145,8 +146,12 @@ def fetch_json(url: str, timeout: int = 30) -> dict:
     req = urllib.request.Request(url, headers=BROWSER_HEADERS)
     with _opener.open(req, timeout=timeout) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
-    data = json.loads(raw)
-    return data
+    try:
+        return json.loads(raw)
+    except Exception:
+        # 输出实际响应内容（截断），便于远程诊断
+        print(f"::error::非JSON响应，实际内容（前400字符）: {raw[:400]!r}")
+        raise
 
 
 def parse_notices(data) -> list:
