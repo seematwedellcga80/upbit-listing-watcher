@@ -27,6 +27,21 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 诊断 secrets（不打印值，只看是否存在）
+        run: |
+          echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
+          echo "GITHUB_ACTOR=$GITHUB_ACTOR"
+          for s in SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS MAIL_TO; do
+            v="$(printenv "$s" 2>/dev/null || true)"
+            if [ -n "$v" ]; then echo "$s: 已设置（长度 ${#v}）"; else echo "$s: 未设置"; fi
+          done
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || '465' }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+
       - name: Run watcher
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
